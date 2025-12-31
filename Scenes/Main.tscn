@@ -1,0 +1,151 @@
+[gd_scene load_steps=13 format=3 uid="uid://c4j4daydckrcm"]
+
+[ext_resource type="Texture2D" uid="uid://bs2ph6jdwgbae" path="res://Assets/SkyBox.png" id="1_idj7w"]
+[ext_resource type="Script" uid="uid://7lfg8m72uifd" path="res://Scripts/Main.gd" id="1_kln2b"]
+[ext_resource type="PackedScene" uid="uid://c55yqtqi2spl6" path="res://Assets/WaterScene.glb" id="1_r150o"]
+[ext_resource type="PackedScene" uid="uid://b6auegp8ti0pb" path="res://Scenes/FPSLabel.tscn" id="4_rgh2o"]
+
+[sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_kln2b"]
+panorama = ExtResource("1_idj7w")
+
+[sub_resource type="Sky" id="Sky_r150o"]
+sky_material = SubResource("PanoramaSkyMaterial_kln2b")
+
+[sub_resource type="Environment" id="Environment_idj7w"]
+background_mode = 2
+sky = SubResource("Sky_r150o")
+
+[sub_resource type="Shader" id="Shader_rgh2o"]
+code = "// NOTE: Shader automatically converted from Godot Engine 4.5.1.stable's StandardMaterial3D.
+
+shader_type spatial;
+render_mode blend_mix, depth_draw_always, cull_back, diffuse_burley, specular_schlick_ggx;
+
+uniform vec4 albedo : source_color;
+uniform sampler2D texture_albedo : source_color, filter_linear_mipmap, repeat_enable;
+uniform ivec2 albedo_texture_size;
+uniform float point_size : hint_range(0.1, 128.0, 0.1);
+
+uniform float roughness : hint_range(0.0, 1.0);
+uniform sampler2D texture_metallic : hint_default_white, filter_linear_mipmap, repeat_enable;
+uniform vec4 metallic_texture_channel;
+uniform sampler2D texture_roughness : hint_roughness_r, filter_linear_mipmap, repeat_enable;
+
+uniform float specular : hint_range(0.0, 1.0, 0.01);
+uniform float metallic : hint_range(0.0, 1.0, 0.01);
+
+uniform sampler2D texture_refraction : filter_linear_mipmap, repeat_enable;
+uniform float refraction : hint_range(-1.0, 1.0, 0.001);
+uniform vec4 refraction_texture_channel;
+uniform sampler2D screen_texture : hint_screen_texture, repeat_disable, filter_linear_mipmap;
+uniform sampler2D depth_texture : hint_depth_texture, repeat_disable, filter_nearest;
+
+uniform sampler2D texture_normal : hint_roughness_normal, filter_linear_mipmap, repeat_enable;
+uniform float normal_scale : hint_range(-16.0, 16.0);
+
+uniform vec3 uv1_scale;
+uniform vec3 uv1_offset;
+uniform vec3 uv2_scale;
+uniform vec3 uv2_offset;
+
+void vertex() {
+	UV = UV * uv1_scale.xy + uv1_offset.xy + TIME * 0.01;
+}
+
+void fragment() {
+	vec2 base_uv = UV;
+
+	vec4 albedo_tex = texture(texture_albedo, base_uv);
+	ALBEDO = albedo.rgb * albedo_tex.rgb;
+
+	float metallic_tex = dot(texture(texture_metallic, base_uv), metallic_texture_channel);
+	METALLIC = metallic_tex * metallic;
+	SPECULAR = specular;
+
+	vec4 roughness_texture_channel = vec4(1.0, 0.0, 0.0, 0.0);
+	float roughness_tex = dot(texture(texture_roughness, base_uv), roughness_texture_channel);
+	ROUGHNESS = roughness_tex * roughness;
+
+	// Normal Map: Enabled
+	NORMAL_MAP = texture(texture_normal, base_uv).rgb;
+	NORMAL_MAP_DEPTH = normal_scale;
+
+	// Refraction: Enabled (with normal map texture)
+	vec3 unpacked_normal = NORMAL_MAP;
+	unpacked_normal.xy = unpacked_normal.xy * 2.0 - 1.0;
+	unpacked_normal.z = sqrt(max(0.0, 1.0 - dot(unpacked_normal.xy, unpacked_normal.xy)));
+	vec3 ref_normal = normalize(mix(
+			NORMAL,
+			TANGENT * unpacked_normal.x + BINORMAL * unpacked_normal.y + NORMAL * unpacked_normal.z,
+			NORMAL_MAP_DEPTH));
+	vec2 ref_ofs = SCREEN_UV - ref_normal.xy * dot(texture(texture_refraction, base_uv), refraction_texture_channel) * refraction;
+
+	float ref_amount = 1.0 - albedo.a * albedo_tex.a;
+
+	float refraction_depth_tex = textureLod(depth_texture, ref_ofs, 0.0).r;
+	vec4 refraction_view_pos = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, refraction_depth_tex, 1.0);
+	refraction_view_pos.xyz /= refraction_view_pos.w;
+
+	// If the depth buffer is lower then the model's Z position, use the refracted UV, otherwise use the normal screen UV.
+	// At low depth differences, decrease refraction intensity to avoid sudden discontinuities.
+	EMISSION += textureLod(screen_texture, mix(SCREEN_UV, ref_ofs, smoothstep(0.0, 1.0, VERTEX.z - refraction_view_pos.z)), ROUGHNESS * 8.0).rgb * ref_amount * EXPOSURE;
+	ALBEDO *= 1.0 - ref_amount;
+	// Force transparency on the material (required for refraction).
+	ALPHA = 1.0;
+}
+"
+
+[sub_resource type="FastNoiseLite" id="FastNoiseLite_pbw6q"]
+
+[sub_resource type="NoiseTexture2D" id="NoiseTexture2D_v1gob"]
+noise = SubResource("FastNoiseLite_pbw6q")
+seamless = true
+as_normal_map = true
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_jw32o"]
+render_priority = 0
+shader = SubResource("Shader_rgh2o")
+shader_parameter/albedo = Color(0, 0.4862745, 0.6117647, 0.3647059)
+shader_parameter/albedo_texture_size = Vector2i(0, 0)
+shader_parameter/point_size = 0.0
+shader_parameter/roughness = 0.078000003705
+shader_parameter/metallic_texture_channel = Vector4(1, 0, 0, 0)
+shader_parameter/specular = 0.5
+shader_parameter/metallic = 0.0
+shader_parameter/refraction = 0.05
+shader_parameter/refraction_texture_channel = Vector4(1, 0, 0, 0)
+shader_parameter/texture_normal = SubResource("NoiseTexture2D_v1gob")
+shader_parameter/normal_scale = 1.0
+shader_parameter/uv1_scale = Vector3(1, 1, 1)
+shader_parameter/uv1_offset = Vector3(0, 0, 0)
+shader_parameter/uv2_scale = Vector3(1, 1, 1)
+shader_parameter/uv2_offset = Vector3(0, 0, 0)
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_pbw6q"]
+material = SubResource("ShaderMaterial_jw32o")
+size = Vector2(8, 8)
+
+[node name="Node3D" type="Node3D"]
+script = ExtResource("1_kln2b")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_idj7w")
+
+[node name="CanvasLayer" parent="." instance=ExtResource("4_rgh2o")]
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(-0.7245338, -0.3833192, 0.5728152, 0.14747049, 0.72562164, 0.67210525, -0.673278, 0.57143635, -0.4692092, 19.948082, 3.2592182, -40.513317)
+light_bake_mode = 0
+shadow_enabled = true
+directional_shadow_blend_splits = true
+sky_mode = 1
+
+[node name="WaterScene" parent="." instance=ExtResource("1_r150o")]
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="WaterScene"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.016087294, 1.7073615, 0.012502193)
+mesh = SubResource("PlaneMesh_pbw6q")
+skeleton = NodePath("../..")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(0.8658225, 0.31183356, -0.39129436, 0.02081144, 0.7589183, 0.6508532, 0.4999183, -0.5716668, 0.6505988, -5.843208, 6.6351185, 6.542817)
